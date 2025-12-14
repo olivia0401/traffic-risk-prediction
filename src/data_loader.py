@@ -1,7 +1,6 @@
 """Data loading and preprocessing for UK DfT accident data"""
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
 
 
 def load_and_prepare_data(data_dir='data'):

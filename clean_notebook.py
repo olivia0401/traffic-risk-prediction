@@ -1,8 +1,13 @@
 """Clean Jupyter Notebook by removing error cells and warnings"""
 import json
+from pathlib import Path
+
+# --- Use Pathlib for robust, relative paths ---
+script_dir = Path(__file__).resolve().parent
+notebook_path = script_dir / 'notebooks' / 'traffic_risk_eda.ipynb'
 
 # Read the notebook
-with open('/home/olivia/traffic-risk-prediction/notebooks/traffic_risk_eda.ipynb', 'r', encoding='utf-8') as f:
+with open(notebook_path, 'r', encoding='utf-8') as f:
     nb = json.load(f)
 
 # Cell IDs to remove (cells with errors)
@@ -25,7 +30,7 @@ for cell in nb['cells']:
             ]
 
 # Save cleaned notebook
-with open('/home/olivia/traffic-risk-prediction/notebooks/traffic_risk_eda.ipynb', 'w', encoding='utf-8') as f:
+with open(notebook_path, 'w', encoding='utf-8') as f:
     json.dump(nb, f, indent=1, ensure_ascii=False)
 
 print("✓ Notebook cleaned successfully")

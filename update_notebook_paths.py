@@ -1,8 +1,14 @@
 """Update Notebook to use 2025 data files"""
 import json
+from pathlib import Path
+
+# --- Use Pathlib for robust, relative paths ---
+script_dir = Path(__file__).resolve().parent
+notebook_path = script_dir / 'notebooks' / 'traffic_risk_eda.ipynb'
+
 
 # Read the notebook
-with open('/home/olivia/traffic-risk-prediction/notebooks/traffic_risk_eda.ipynb', 'r', encoding='utf-8') as f:
+with open(notebook_path, 'r', encoding='utf-8') as f:
     nb = json.load(f)
 
 # Update the data loading cell (cell id: 59e4710d-872b-4b8f-846b-d02db1f4162e)
@@ -31,7 +37,7 @@ for cell in nb['cells']:
         print(f"✓ Updated title cell")
 
 # Save updated notebook
-with open('/home/olivia/traffic-risk-prediction/notebooks/traffic_risk_eda.ipynb', 'w', encoding='utf-8') as f:
+with open(notebook_path, 'w', encoding='utf-8') as f:
     json.dump(nb, f, indent=1, ensure_ascii=False)
 
 print("\n✓ Notebook updated successfully for 2025 data")

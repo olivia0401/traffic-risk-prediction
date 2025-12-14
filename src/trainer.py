@@ -66,10 +66,10 @@ class SeverityClassifier:
             ])
 
         elif model_type == 'xgb':
-            # XGBoost with scale_pos_weight for imbalance
-            return Pipeline([
+            # XGBoost with SMOTE for multi-class imbalance
+            return ImbPipeline([
+                ('smote', SMOTE(random_state=42)),
                 ('clf', XGBClassifier(
-                    scale_pos_weight=3,
                     n_estimators=100,
                     max_depth=3,
                     learning_rate=0.1,
