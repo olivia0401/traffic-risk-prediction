@@ -73,7 +73,6 @@ class SeverityClassifier:
                     n_estimators=100,
                     max_depth=3,
                     learning_rate=0.1,
-                    use_label_encoder=False,
                     eval_metric='mlogloss',
                     random_state=42
                 ))
