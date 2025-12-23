@@ -1,0 +1,5 @@
+# Mark Jupyter notebooks as documentation to exclude from language statistics
+*.ipynb linguist-documentation
+
+# Mark Python as the primary language
+*.py linguist-language=Python
