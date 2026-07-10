@@ -1,19 +1,33 @@
-# Traffic Risk Prediction for Autonomous Driving
+# UK Road Casualty Severity Analysis
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://www.postgresql.org/)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.2+-orange.svg)](https://scikit-learn.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive machine learning and data engineering system for predicting traffic accident risks using 48,472+ UK traffic accident records. Combines SQL analytics, time series forecasting, and multi-class classification to enable safer autonomous vehicle decision-making.
+A machine-learning and data-engineering study of UK road-safety records: retrospective
+**casualty-severity classification** (how serious was a casualty, given a recorded collision)
+plus **temporal analysis** of when accidents cluster. Built on 48,472 UK Department for
+Transport accident records, combining SQL analytics, time-series forecasting, and
+multi-class classification.
+
+> **Scope & honesty note.** This is a *post-hoc* analysis of accidents that already
+> happened, **not** a pre-accident or real-time risk predictor. The severity model uses
+> casualty attributes (`age_of_casualty`, `sex_of_casualty`, `casualty_class`,
+> `casualty_type`) that are only known **after** a collision is recorded, so the reported
+> scores are not achievable at deployment time for prediction *before* an accident. Treat
+> the results as descriptive/analytical, not as a safety system for autonomous vehicles.
+> See [Feature scope & leakage](#feature-scope--leakage).
 
 ## Overview
 
-This project demonstrates full-stack data science capabilities through a production-ready pipeline that processes real-world traffic data to predict accident risks for autonomous driving systems. The system tackles both temporal forecasting (when will accidents occur?) and severity classification (how serious will they be?).
+This project demonstrates a full data-science pipeline over real-world road-safety data:
+temporal analysis (when do accidents cluster?) and casualty-severity classification
+(given a recorded collision, how serious was the casualty?).
 
 **Dataset:** 48,472 UK Department for Transport accident records (2025)
 **Total Code:** 2,355 lines (1,367 Python + 988 SQL)
-**Status:** Fully functional with synthetic demo capability
+**Status:** Functional, with a synthetic-data demo for quick runs
 
 ---
 
@@ -63,12 +77,12 @@ traffic-risk-prediction/
 
 ### Data Insights
 
-| Finding | Impact | Implication for AVs |
-|---------|--------|---------------------|
-| **Peak Risk: 3-6 PM** | 42% of daily accidents | Increase following distance during rush hour |
-| **Weather Paradox** | 67% accidents in fine weather | Don't relax safety in good conditions |
-| **Vulnerable Users** | Motorcycles 75% higher severity | Enhanced detection for two-wheelers |
-| **Friday Effect** | Highest accident count | Alert level increase end-of-week |
+| Finding | Detail | Interpretation |
+|---------|--------|----------------|
+| **Peak count: 3-6 PM** | 42% of daily accidents | Rush-hour concentration |
+| **Fine-weather share** | 67% of accidents in fine weather | Reflects exposure (most driving is in fine weather), not weather safety |
+| **Vulnerable users** | Motorcycles 75% higher severity | Two-wheeler casualties skew more severe |
+| **Friday effect** | Highest accident count | End-of-week temporal pattern |
 
 ### Model Performance
 
@@ -134,6 +148,26 @@ pipeline = ImbPipeline([
    - Max iterations: 1,000
 
 **Evaluation:** Stratified 5-Fold CV with macro F1-scoring
+
+#### Feature scope & leakage
+
+The severity classifier is trained on attributes recorded **as part of the accident
+report**, including casualty-level fields (`age_of_casualty`, `sex_of_casualty`,
+`casualty_class`, `casualty_type`) and collision context. These are only available
+*after* a collision has occurred and a casualty exists.
+
+Implications, stated plainly:
+
+- This is **retrospective casualty-severity classification**, useful for understanding
+  and describing recorded accidents — e.g. which recorded conditions correlate with more
+  severe casualties.
+- It is **not** a pre-accident or real-time risk system. A model that consumes
+  post-collision casualty attributes cannot run *before* an accident, so the reported F1
+  does not transfer to any "predict risk ahead of time" deployment (that would be
+  target-time leakage / deployment-time unavailability).
+- To repurpose this for genuine ahead-of-time risk estimation, the feature set would need
+  to be restricted to variables observable *before* an incident (road/weather/time/location
+  context only), and re-evaluated — the numbers here would not carry over.
 
 ---
 
@@ -526,10 +560,10 @@ MIT License - Free to use and modify for educational and commercial purposes.
 
 ## Author
 
-Built as a comprehensive data science portfolio demonstrating:
-- Full-stack ML pipeline (data → SQL → ML → deployment)
-- Production-ready code with modular design
-- Real-world problem solving (autonomous driving safety)
+Built as a data-science portfolio project demonstrating:
+- End-to-end pipeline (data → SQL → ML → analysis)
+- Modular, readable code
+- Retrospective analysis of a real-world public dataset (UK road safety)
 - Advanced SQL and Python techniques
 
 ---

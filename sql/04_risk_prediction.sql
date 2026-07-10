@@ -1,14 +1,15 @@
 -- ============================================================================
--- RISK PREDICTION & SCORING QUERIES
+-- HISTORICAL RISK SCORING QUERIES
 -- ============================================================================
--- Purpose: Predict accident risk for specific time windows
--- Used for autonomous driving route planning and safety alerts
+-- Purpose: Score historical accident risk for specific time/condition windows
+-- Descriptive scoring from historical aggregates (hour/day/weather/light) —
+-- not a real-time or pre-accident predictor.
 -- ============================================================================
 
 -- ============================================================================
--- 1. REAL-TIME RISK SCORING FOR CURRENT CONDITIONS
+-- 1. HISTORICAL RISK SCORING BY CONDITIONS
 -- ============================================================================
--- Example: Predict risk for "Friday, 5:00 PM, rainy, urban area"
+-- Example: historical risk profile for "Friday, 5:00 PM, rainy, urban area"
 
 CREATE OR REPLACE FUNCTION get_risk_score(
     p_hour INT,
@@ -244,5 +245,5 @@ LIMIT 20;
 -- COMMENTS
 -- ============================================================================
 
-COMMENT ON FUNCTION get_risk_score IS 'Returns real-time risk prediction for given conditions';
+COMMENT ON FUNCTION get_risk_score IS 'Returns a historical risk profile (expected accident level) for given time/conditions, from past aggregates';
 COMMENT ON VIEW ml_training_dataset IS 'Clean feature set for machine learning model training';

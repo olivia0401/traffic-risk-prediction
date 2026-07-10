@@ -130,7 +130,7 @@ GROUP BY month, month_name
 ORDER BY month;
 
 -- ============================================================================
--- 7. HIGH-RISK TIME WINDOWS (FOR AUTONOMOUS DRIVING)
+-- 7. HIGH-RISK TIME WINDOWS (HISTORICAL)
 -- ============================================================================
 -- Identify specific hour + day combinations with highest accident rates
 

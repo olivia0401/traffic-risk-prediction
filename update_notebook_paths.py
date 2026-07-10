@@ -33,7 +33,7 @@ for cell in nb['cells']:
 # Update title cell to mention 2025
 for cell in nb['cells']:
     if cell.get('id') == 'ca92a23a-a43d-4e28-8241-e4264a44f17a':
-        cell['source'][0] = '# **Predictive Traffic Risk Modelling for Autonomous Driving (2025 Data)**\n'
+        cell['source'][0] = '# **UK Road Casualty Severity Analysis (2025 Data)**\n'
         print(f"✓ Updated title cell")
 
 # Save updated notebook
