@@ -33,6 +33,6 @@ for cell in nb['cells']:
 with open(notebook_path, 'w', encoding='utf-8') as f:
     json.dump(nb, f, indent=1, ensure_ascii=False)
 
-print("✓ Notebook cleaned successfully")
-print(f"✓ Removed {len(cells_to_remove)} error cells")
-print(f"✓ Total cells remaining: {len(nb['cells'])}")
+print("[OK] Notebook cleaned successfully")
+print(f"[OK] Removed {len(cells_to_remove)} error cells")
+print(f"[OK] Total cells remaining: {len(nb['cells'])}")

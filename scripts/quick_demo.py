@@ -76,7 +76,7 @@ def demo_severity_models():
 
     # Best model
     best = max(results.keys(), key=lambda k: results[k]['f1_cv_mean'])
-    print(f"\n🏆 Best model: {best.upper()} (F1={results[best]['f1_cv_mean']:.3f})")
+    print(f"\nBest model: {best.upper()} (F1={results[best]['f1_cv_mean']:.3f})")
 
 
 def generate_demo_timeseries_data():
@@ -159,7 +159,7 @@ def demo_timeseries_simple():
 
     # Peak hours
     peak_hours = hourly_avg.nlargest(3)
-    print(f"\n🚨 Peak risk hours:")
+    print(f"\nPeak risk hours:")
     for hour, count in peak_hours.items():
         print(f"   {hour:02d}:00 - {count:.2f} accidents/hour")
 
@@ -174,7 +174,7 @@ def main():
     try:
         demo_severity_models()
     except Exception as e:
-        print(f"\n❌ Severity demo failed: {e}")
+        print(f"\n[FAIL] Severity demo failed: {e}")
         import traceback
         traceback.print_exc()
 
@@ -182,12 +182,12 @@ def main():
     try:
         demo_timeseries_simple()
     except Exception as e:
-        print(f"\n❌ Time series demo failed: {e}")
+        print(f"\n[FAIL] Time series demo failed: {e}")
         import traceback
         traceback.print_exc()
 
     print("\n" + "="*70)
-    print(" ✅ DEMO COMPLETE")
+    print(" [OK] DEMO COMPLETE")
     print("="*70)
     print("\nThis demo used synthetic data.")
     print("\nTo train on real UK DfT data:")

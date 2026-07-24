@@ -92,7 +92,7 @@ traffic-risk-prediction/
 |-------|-----|------|----------|
 | ARIMA(5,1,2) | 2.84 | 3.67 | Baseline short-term forecast |
 | SARIMA(1,1,1,24) | 2.31 | 3.12 | Hourly with daily seasonality |
-| **Prophet** | **2.19** | **2.98** | Best overall (daily) ✅ |
+| **Prophet** | **2.19** | **2.98** | Best overall (daily) |
 | LSTM | - | - | Training implemented |
 
 **Severity Classification:**
@@ -100,7 +100,7 @@ traffic-risk-prediction/
 | Model | F1-Score (macro) | Cross-Val | Notes |
 |-------|------------------|-----------|-------|
 | Logistic Regression | 0.60 | 5-fold | Baseline |
-| **Random Forest** | **0.762** | 5-fold | Best performer ✅ |
+| **Random Forest** | **0.762** | 5-fold | Best performer |
 | MLP Neural Net | 0.72 | 5-fold | Competitive |
 | XGBoost | 0.74 | 5-fold | Strong alternative |
 
@@ -196,7 +196,7 @@ order=(1,1,1), seasonal_order=(1,1,1,24)
 # Demo result: MAE=2.31 (best for hourly)
 ```
 
-**Model 3: Prophet (Meta's Forecasting Library)** ✅
+**Model 3: Prophet (Meta's Forecasting Library)**
 ```python
 # Flexible multi-level seasonality
 Prophet(yearly_seasonality=True,

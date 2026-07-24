@@ -28,18 +28,18 @@ for cell in nb['cells']:
         # Clear outputs to remove DtypeWarning
         cell['outputs'] = []
         cell['execution_count'] = None
-        print(f"✓ Updated cell {cell['id']}")
+        print(f"[OK] Updated cell {cell['id']}")
 
 # Update title cell to mention 2025
 for cell in nb['cells']:
     if cell.get('id') == 'ca92a23a-a43d-4e28-8241-e4264a44f17a':
         cell['source'][0] = '# **UK Road Casualty Severity Analysis (2025 Data)**\n'
-        print(f"✓ Updated title cell")
+        print(f"[OK] Updated title cell")
 
 # Save updated notebook
 with open(notebook_path, 'w', encoding='utf-8') as f:
     json.dump(nb, f, indent=1, ensure_ascii=False)
 
-print("\n✓ Notebook updated successfully for 2025 data")
-print("✓ Data paths now point to: ../data/collision_2025.csv, etc.")
-print("✓ Added low_memory=False to suppress warnings")
+print("\n[OK] Notebook updated successfully for 2025 data")
+print("[OK] Data paths now point to: ../data/collision_2025.csv, etc.")
+print("[OK] Added low_memory=False to suppress warnings")

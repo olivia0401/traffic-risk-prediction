@@ -51,7 +51,7 @@ def train_severity_models(data_dir='data', model_type='all'):
             'XGBoost': 'xgb'
         }[best_model_name]
 
-        print(f"\n🏆 Best model: {best_model_name}")
+        print(f"\nBest model: {best_model_name}")
         print(f"   F1-score: {results[best_model_name]['f1_cv_mean']:.3f}")
 
         # Train and save best model
@@ -106,7 +106,7 @@ def train_timeseries_models(data_dir='data', model_type='all', frequency='daily'
         # Save best model
         if results:
             best_model_name = min(results, key=lambda k: results[k]['mae'])
-            print(f"\n🏆 Best model: {best_model_name}")
+            print(f"\nBest model: {best_model_name}")
             print(f"   MAE: {results[best_model_name]['mae']:.2f}")
 
     else:
@@ -130,7 +130,7 @@ def train_timeseries_models(data_dir='data', model_type='all', frequency='daily'
         predictor.save_model(f'models/timeseries_{model_type}_{frequency}.pkl')
 
         # Generate forecast example
-        print(f"\n📈 Generating 7-day forecast...")
+        print(f"\nGenerating 7-day forecast...")
         if frequency == 'daily':
             forecast = predictor.forecast(steps=7)
         else:
@@ -177,12 +177,12 @@ def main():
         try:
             train_severity_models(args.data_dir, args.model)
         except FileNotFoundError as e:
-            print(f"\n❌ Error: Data files not found in '{args.data_dir}/'")
+            print(f"\n[FAIL] Error: Data files not found in '{args.data_dir}/'")
             print("Please download UK DfT data from:")
             print("https://www.data.gov.uk/dataset/road-accidents-safety-data")
             return 1
         except Exception as e:
-            print(f"\n❌ Severity training failed: {e}")
+            print(f"\n[FAIL] Severity training failed: {e}")
             import traceback
             traceback.print_exc()
 
@@ -190,17 +190,17 @@ def main():
         try:
             train_timeseries_models(args.data_dir, args.model, args.freq)
         except FileNotFoundError as e:
-            print(f"\n❌ Error: Data files not found in '{args.data_dir}/'")
+            print(f"\n[FAIL] Error: Data files not found in '{args.data_dir}/'")
             print("Please download UK DfT data from:")
             print("https://www.data.gov.uk/dataset/road-accidents-safety-data")
             return 1
         except Exception as e:
-            print(f"\n❌ Time series training failed: {e}")
+            print(f"\n[FAIL] Time series training failed: {e}")
             import traceback
             traceback.print_exc()
 
     print("\n" + "="*70)
-    print(" ✅ TRAINING COMPLETE")
+    print(" [OK] TRAINING COMPLETE")
     print("="*70)
     print("\nTrained models saved in models/ directory")
     print("\nNext steps:")
