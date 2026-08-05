@@ -30,8 +30,23 @@ except ImportError:
 try:
     import torch
     import torch.nn as nn
+    from torch.utils.data import TensorDataset, DataLoader
     from sklearn.preprocessing import MinMaxScaler
     PYTORCH_AVAILABLE = True
+
+    class LSTMForecaster(nn.Module):
+        """Two-layer LSTM regressor for univariate accident-count forecasting."""
+
+        def __init__(self, input_size=1, hidden_size=50, num_layers=2):
+            super().__init__()
+            self.lstm = nn.LSTM(input_size, hidden_size, num_layers,
+                                batch_first=True)
+            self.fc = nn.Linear(hidden_size, 1)
+
+        def forward(self, x):
+            out, _ = self.lstm(x)
+            return self.fc(out[:, -1, :])
+
 except ImportError:
     PYTORCH_AVAILABLE = False
     print("Warning: PyTorch not installed. LSTM models unavailable.")
@@ -63,10 +78,10 @@ class TimeSeriesPredictor:
         Returns:
             pd.Series: Hourly accident counts indexed by datetime
         """
-        # Combine date and time
+        # Combine date and time (UK DfT dates are DD/MM/YYYY → dayfirst)
         collision_df['datetime'] = pd.to_datetime(
             collision_df['date'] + ' ' + collision_df['time'],
-            errors='coerce'
+            dayfirst=True, errors='coerce'
         )
 
         # Remove invalid datetimes
@@ -74,14 +89,14 @@ class TimeSeriesPredictor:
 
         # Aggregate by hour
         hourly_counts = collision_df.groupby(
-            collision_df['datetime'].dt.floor('H')
+            collision_df['datetime'].dt.floor('h')
         ).size()
 
         # Fill missing hours with 0
         full_range = pd.date_range(
             start=hourly_counts.index.min(),
             end=hourly_counts.index.max(),
-            freq='H'
+            freq='h'
         )
         hourly_counts = hourly_counts.reindex(full_range, fill_value=0)
 
@@ -97,7 +112,8 @@ class TimeSeriesPredictor:
         Returns:
             pd.Series: Daily accident counts indexed by date
         """
-        collision_df['date'] = pd.to_datetime(collision_df['date'], errors='coerce')
+        collision_df['date'] = pd.to_datetime(collision_df['date'],
+                                              dayfirst=True, errors='coerce')
         collision_df = collision_df.dropna(subset=['date'])
 
         daily_counts = collision_df.groupby(
@@ -263,88 +279,149 @@ class TimeSeriesPredictor:
 
         return metrics
 
-    def train_lstm(self, time_series, sequence_length=24, epochs=50):
+    def train_lstm(self, time_series, sequence_length=24, epochs=100,
+                   hidden_size=50, num_layers=2, batch_size=32,
+                   test_frac=0.2, patience=10, lr=1e-3):
         """
-        Train LSTM model (requires PyTorch)
+        Train an LSTM sequence forecaster (PyTorch) with an honest chronological
+        train / validation / test backtest.
+
+        The series is split in time order — never shuffled — so the model is only
+        ever trained on the past and scored on the future:
+
+            [-------- train --------][-- val --][---- test ----]
+
+        The scaler is fit on the training region only (no look-ahead leakage), a
+        validation tail drives early stopping, and the reported MAE/RMSE/MAPE are
+        computed on the untouched test tail. These are therefore genuine
+        one-step-ahead errors, not the in-sample fit the earlier version reported.
 
         Args:
-            time_series: pd.Series with datetime index
-            sequence_length: Number of past timesteps to use
-            epochs: Training epochs
+            time_series: pd.Series with a datetime index
+            sequence_length: number of past timesteps fed to the LSTM
+            epochs: maximum training epochs (early stopping usually stops sooner)
+            hidden_size, num_layers: LSTM capacity
+            batch_size: mini-batch size
+            test_frac: fraction of the most recent data held out for testing
+            patience: early-stopping patience (epochs without val improvement)
+            lr: Adam learning rate
 
         Returns:
-            dict: Training metrics
+            dict: held-out test metrics
         """
         if not PYTORCH_AVAILABLE:
             raise ImportError("PyTorch required for LSTM")
 
         print(f"\nTraining LSTM model...")
-        print(f"Sequence length: {sequence_length}")
-        print(f"Epochs: {epochs}")
+        print(f"Sequence length: {sequence_length} | max epochs: {epochs}")
 
-        # Normalize data
+        values = time_series.values.astype("float32").reshape(-1, 1)
+        n = len(values)
+        if n < sequence_length + 10:
+            raise ValueError(
+                f"Series too short ({n}) for sequence_length={sequence_length}"
+            )
+
+        # --- chronological split; fit scaler on TRAIN only to avoid leakage ---
+        n_test = max(1, int(round(n * test_frac)))
+        split = n - n_test
+        val_split = max(sequence_length + 1, int(round(split * 0.9)))
+
         self.scaler = MinMaxScaler()
-        scaled_data = self.scaler.fit_transform(time_series.values.reshape(-1, 1))
+        self.scaler.fit(values[:split])
+        scaled = self.scaler.transform(values)
 
-        # Create sequences
-        X, y = [], []
-        for i in range(len(scaled_data) - sequence_length):
-            X.append(scaled_data[i:i+sequence_length])
-            y.append(scaled_data[i+sequence_length])
+        def make_sequences(arr, start, end):
+            """Windows ending at t (exclusive-of-t inputs) predicting value at t."""
+            X, y = [], []
+            for t in range(max(start, sequence_length), end):
+                X.append(arr[t - sequence_length:t])
+                y.append(arr[t])
+            if not X:
+                return (np.empty((0, sequence_length, 1), dtype="float32"),
+                        np.empty((0, 1), dtype="float32"))
+            return np.array(X, dtype="float32"), np.array(y, dtype="float32")
 
-        X = torch.FloatTensor(np.array(X))
-        y = torch.FloatTensor(np.array(y))
+        X_tr, y_tr = make_sequences(scaled, sequence_length, val_split)
+        X_val, y_val = make_sequences(scaled, val_split, split)
+        X_te, y_te = make_sequences(scaled, split, n)
+        if len(X_te) == 0:
+            raise ValueError("Test split produced no samples; raise test_frac or add data")
 
-        # Define LSTM model
-        class LSTMModel(nn.Module):
-            def __init__(self, input_size=1, hidden_size=50, num_layers=2):
-                super().__init__()
-                self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-                self.fc = nn.Linear(hidden_size, 1)
+        torch.manual_seed(42)
+        train_dl = DataLoader(
+            TensorDataset(torch.from_numpy(X_tr), torch.from_numpy(y_tr)),
+            batch_size=batch_size, shuffle=True,
+        )
 
-            def forward(self, x):
-                out, _ = self.lstm(x)
-                out = self.fc(out[:, -1, :])
-                return out
-
-        # Train model
-        self.model = LSTMModel()
+        self.model = LSTMForecaster(1, hidden_size, num_layers)
+        self.sequence_length = sequence_length
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
         criterion = nn.MSELoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+
+        has_val = len(X_val) > 0
+        Xv = torch.from_numpy(X_val) if has_val else None
+        yv = torch.from_numpy(y_val) if has_val else None
+
+        best_val = float("inf")
+        best_state = None
+        epochs_no_improve = 0
 
         for epoch in range(epochs):
             self.model.train()
-            optimizer.zero_grad()
-            outputs = self.model(X)
-            loss = criterion(outputs, y)
-            loss.backward()
-            optimizer.step()
+            for xb, yb in train_dl:
+                optimizer.zero_grad()
+                loss = criterion(self.model(xb), yb)
+                loss.backward()
+                optimizer.step()
 
-            if (epoch + 1) % 10 == 0:
-                print(f"  Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}")
+            if has_val:
+                self.model.eval()
+                with torch.no_grad():
+                    val_loss = criterion(self.model(Xv), yv).item()
+                if val_loss < best_val - 1e-6:
+                    best_val = val_loss
+                    best_state = {k: v.clone()
+                                  for k, v in self.model.state_dict().items()}
+                    epochs_no_improve = 0
+                else:
+                    epochs_no_improve += 1
+                if (epoch + 1) % 10 == 0:
+                    print(f"  Epoch [{epoch+1}/{epochs}]  val_loss={val_loss:.4f}")
+                if epochs_no_improve >= patience:
+                    print(f"  Early stop at epoch {epoch+1} "
+                          f"(best val_loss={best_val:.4f})")
+                    break
 
-        # Evaluate
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+
+        # keep the final window so forecast() can roll forward from the series end
+        self.last_sequence = scaled[-sequence_length:].copy()
+
+        # --- honest held-out evaluation: one-step-ahead on the test tail ---
         self.model.eval()
         with torch.no_grad():
-            predictions = self.model(X).numpy()
+            pred_scaled = self.model(torch.from_numpy(X_te)).numpy()
+        predictions = self.scaler.inverse_transform(pred_scaled)
+        actuals = self.scaler.inverse_transform(y_te)
 
-        # Inverse transform
-        predictions = self.scaler.inverse_transform(predictions)
-        actuals = self.scaler.inverse_transform(y.numpy())
-
-        # Calculate metrics
-        mae = np.mean(np.abs(actuals - predictions))
-        rmse = np.sqrt(np.mean((actuals - predictions) ** 2))
-        mape = np.mean(np.abs((actuals - predictions) / (actuals + 1))) * 100
+        mae = float(np.mean(np.abs(actuals - predictions)))
+        rmse = float(np.sqrt(np.mean((actuals - predictions) ** 2)))
+        mape = float(np.mean(np.abs((actuals - predictions) / (actuals + 1))) * 100)
 
         metrics = {
             'mae': mae,
             'rmse': rmse,
             'mape': mape,
-            'sequence_length': sequence_length
+            'sequence_length': sequence_length,
+            'n_test': int(len(X_te)),
+            'eval': 'held-out chronological test tail',
         }
 
-        print(f"\nLSTM Model Performance:")
+        print(f"\nLSTM Model Performance (held-out test, n={len(X_te)}):")
         print(f"  MAE:  {mae:.2f}")
         print(f"  RMSE: {rmse:.2f}")
         print(f"  MAPE: {mape:.2f}%")
@@ -371,13 +448,29 @@ class TimeSeriesPredictor:
             if self.model is None:
                 raise ValueError("Model not trained yet")
             # Create future dataframe
-            future = self.model.make_future_dataframe(periods=steps, freq='H')
+            future = self.model.make_future_dataframe(periods=steps, freq='h')
             forecast = self.model.predict(future)
             return forecast['yhat'].values[-steps:]
 
         elif self.model_type == 'lstm':
-            # TODO: Implement LSTM forecasting
-            raise NotImplementedError("LSTM forecasting not yet implemented")
+            if self.model is None or getattr(self, 'last_sequence', None) is None:
+                raise ValueError("Model not trained yet")
+            # Recursive multi-step forecast: feed each prediction back in as the
+            # newest observation and slide the input window forward one step.
+            self.model.eval()
+            window = self.last_sequence.copy()          # (seq_len, 1), scaled
+            preds_scaled = []
+            with torch.no_grad():
+                for _ in range(steps):
+                    x = torch.from_numpy(
+                        window.reshape(1, self.sequence_length, 1).astype("float32")
+                    )
+                    nxt = self.model(x).numpy().reshape(1, 1)   # scaled next value
+                    preds_scaled.append(nxt[0, 0])
+                    window = np.vstack([window[1:], nxt])        # roll forward
+            return self.scaler.inverse_transform(
+                np.array(preds_scaled, dtype="float32").reshape(-1, 1)
+            ).ravel()
 
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
@@ -400,7 +493,11 @@ class TimeSeriesPredictor:
             torch.save({
                 'model_type': self.model_type,
                 'model_state': self.model.state_dict(),
-                'scaler': self.scaler
+                'scaler': self.scaler,
+                'sequence_length': self.sequence_length,
+                'hidden_size': getattr(self, 'hidden_size', 50),
+                'num_layers': getattr(self, 'num_layers', 2),
+                'last_sequence': getattr(self, 'last_sequence', None),
             }, filepath)
 
         print(f"\nModel saved to {filepath}")
@@ -411,7 +508,7 @@ class TimeSeriesPredictor:
         if filepath.endswith('.pkl'):
             data = joblib.load(filepath)
         else:
-            data = torch.load(filepath)
+            data = torch.load(filepath, weights_only=False)
 
         predictor = TimeSeriesPredictor(model_type=data['model_type'])
 
@@ -420,8 +517,15 @@ class TimeSeriesPredictor:
         elif data['model_type'] == 'prophet':
             predictor.model = data['model']
         elif data['model_type'] == 'lstm':
+            predictor.sequence_length = data['sequence_length']
+            predictor.hidden_size = data.get('hidden_size', 50)
+            predictor.num_layers = data.get('num_layers', 2)
+            predictor.model = LSTMForecaster(1, predictor.hidden_size,
+                                             predictor.num_layers)
             predictor.model.load_state_dict(data['model_state'])
+            predictor.model.eval()
             predictor.scaler = data['scaler']
+            predictor.last_sequence = data.get('last_sequence')
 
         return predictor
 
@@ -476,6 +580,19 @@ def compare_timeseries_models(time_series, frequency='daily'):
             results['Prophet'] = metrics
         except Exception as e:
             print(f"Prophet training failed: {e}")
+
+    # LSTM
+    if PYTORCH_AVAILABLE:
+        print("\n" + "="*60)
+        print("LSTM Model (held-out chronological backtest)")
+        print("="*60)
+        predictor = TimeSeriesPredictor('lstm')
+        try:
+            seq_len = 24 if frequency == 'hourly' else 7
+            metrics = predictor.train_lstm(time_series, sequence_length=seq_len)
+            results['LSTM'] = metrics
+        except Exception as e:
+            print(f"LSTM training failed: {e}")
 
     # Print summary
     if results:

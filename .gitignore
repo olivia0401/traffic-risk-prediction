@@ -23,8 +23,13 @@ venv/
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE / assistant
 .vscode/
 .idea/
 *.swp
 *.swo
+.claude/
+
+# Generated model artifacts (retrain from scripts; don't commit binaries)
+*.pt
+models/timeseries_*.pkl

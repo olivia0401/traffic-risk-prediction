@@ -7,6 +7,7 @@ Usage:
     python scripts/train_models.py --task timeseries --model prophet --freq daily
     python scripts/train_models.py --task all
 """
+import os
 import sys
 import argparse
 from pathlib import Path
@@ -79,9 +80,13 @@ def train_timeseries_models(data_dir='data', model_type='all', frequency='daily'
     print(f" TIME SERIES FORECASTING ({frequency.upper()})")
     print("="*70)
 
-    # Load collision data
-    collision_df = pd.read_csv(f'{data_dir}/collision_2025.csv', low_memory=False)
-    print(f"\nLoaded {len(collision_df)} collision records")
+    # Load collision data (any year present: collision_2023.csv, _2025.csv, or
+    # the official dft-road-casualty-statistics-collision-*.csv filename)
+    from data_loader import _find_collision_csv
+    collision_path = _find_collision_csv(data_dir)
+    collision_df = pd.read_csv(collision_path, low_memory=False)
+    print(f"\nLoaded {len(collision_df)} collision records from "
+          f"{os.path.basename(collision_path)}")
 
     # Prepare time series
     predictor = TimeSeriesPredictor()

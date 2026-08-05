@@ -25,7 +25,7 @@ This project demonstrates a full data-science pipeline over real-world road-safe
 temporal analysis (when do accidents cluster?) and casualty-severity classification
 (given a recorded collision, how serious was the casualty?).
 
-**Dataset:** 48,472 UK Department for Transport accident records (2025)
+**Dataset:** UK DfT road-safety open data. The SQL and temporal write-up uses a 2025 provisional extract (48,472 collisions); the ML tables were rerun on the full-year 2023 file (104,258 collisions), so those numbers reproduce straight from `data/`.
 **Total Code:** 2,355 lines (1,367 Python + 988 SQL)
 **Status:** Functional, with a synthetic-data demo for quick runs
 
@@ -90,23 +90,31 @@ traffic-risk-prediction/
 
 | Model | MAE | RMSE | Use Case |
 |-------|-----|------|----------|
-| ARIMA(5,1,2) | 2.84 | 3.67 | Baseline short-term forecast |
-| SARIMA(1,1,1,24) | 2.31 | 3.12 | Hourly with daily seasonality |
-| **Prophet** | **2.19** | **2.98** | Best overall (daily) |
-| LSTM | - | - | Training implemented |
+**Hourly forecasting — held-out backtest on real 2023 DfT data** (8,760 hours, last 20% kept back for testing):
 
-**Severity Classification:**
+| Model | MAE | RMSE |
+|-------|-----|------|
+| same hour yesterday (naive) | 4.92 | 6.97 |
+| same hour last week (naive) | 4.49 | 6.42 |
+| **LSTM (PyTorch, 2-layer)** | **3.45** | **4.80** |
 
-| Model | F1-Score (macro) | Cross-Val | Notes |
-|-------|------------------|-----------|-------|
-| Logistic Regression | 0.60 | 5-fold | Baseline |
-| **Random Forest** | **0.762** | 5-fold | Best performer |
-| MLP Neural Net | 0.72 | 5-fold | Competitive |
-| XGBoost | 0.74 | 5-fold | Strong alternative |
+The LSTM beats both naive baselines. It's trained on the earlier part of the year and scored on the most recent slice, so there's no peeking. Reproduce with `python scripts/train_models.py --task timeseries --model lstm --freq hourly`.
 
-**Class Distribution:**
-- Fatal (5%) | Serious (25%) | Slight (70%)
-- **Imbalance Handling**: SMOTE oversampling + class weights
+The old daily ARIMA/Prophet numbers were in-sample, so I've left them out of this comparison.
+
+**Severity classification — two versions.**
+
+Predicting how serious a collision is *before* it happens, from road / weather / time / junction context only (5-fold CV, real 2023 data):
+
+| Model | macro-F1 (CV) | macro-recall (CV) |
+|-------|---------------|-------------------|
+| Logistic Regression | 0.311 ± 0.002 | 0.463 |
+| **Random Forest** | **0.350 ± 0.002** | 0.366 |
+| XGBoost | 0.339 ± 0.003 | 0.418 |
+
+An earlier version scored ~0.76, but it used fields you only know *after* a crash — the casualty's age, sex and injury type. That's leakage: it describes accidents instead of predicting them. Drop those fields and the honest number is ~0.35. Code: `scripts/train_severity_leakfree.py`.
+
+**Class balance (real 2023 data):** Fatal 1.5% · Serious 22.5% · Slight 76% (104,258 collisions), handled with SMOTE + class weights.
 
 ---
 
@@ -130,16 +138,18 @@ pipeline = ImbPipeline([
 ])
 ```
 
+> Heads up — the F1 numbers below are the leaky retrospective ones (they include post-crash casualty fields). The honest leakage-free scores are up in [Model Performance](#model-performance).
+
 **Models Implemented:**
-1. **Random Forest** (Best: F1=0.762)
+1. **Random Forest** (retrospective F1≈0.762; leakage-free ≈0.350)
    - n_estimators=100, class_weight='balanced'
    - No scaling needed (tree-based)
 
-2. **XGBoost** (F1=0.74)
+2. **XGBoost** (retrospective F1≈0.74; leakage-free ≈0.339)
    - SMOTE + multi-class logloss
    - n_estimators=100, max_depth=3
 
-3. **MLP Neural Network** (F1=0.72)
+3. **MLP Neural Network** (retrospective F1≈0.72)
    - Architecture: [input] → [50 hidden] → [output]
    - SMOTE + StandardScaler
 
@@ -207,11 +217,14 @@ Prophet(yearly_seasonality=True,
 # Demo result: MAE=2.19 (BEST overall)
 ```
 
-**Model 4: LSTM (Deep Learning)**
+**Model 4: LSTM (Deep Learning, PyTorch)**
 ```python
-# 2-layer LSTM, hidden_size=50, sequence_length=24
-# Status: Training implemented, forecasting in progress
-# Requires state management for recursive predictions
+# 2-layer LSTM, hidden_size=50, batch_first
+# Chronological train/val/test split (no shuffle, scaler fit on train only)
+# Mini-batch training + early stopping on a validation tail
+# Recursive multi-step forecast(): each prediction is fed back as the newest
+#   observation and the input window slides forward one step
+# Reported MAE/RMSE/MAPE are held-out (test-tail) one-step-ahead errors
 ```
 
 **Metrics Used:** MAE, RMSE, MAPE, AIC, BIC
@@ -523,14 +536,15 @@ ORDER BY total_accidents DESC;
 ## Limitations & Future Work
 
 ### Current Limitations
-1. LSTM forecasting not fully implemented (training works, prediction TODO)
-2. No explicit train/test split (uses in-sample + CV)
+1. Classical time-series models (ARIMA/SARIMA/Prophet) still report in-sample
+   fit; only the LSTM path uses a held-out chronological backtest
+2. Severity classifier uses CV; time-series LSTM uses a chronological hold-out
 3. No logging framework (uses print statements)
 4. No type hints in Python code
 5. No unit tests
 
 ### Planned Enhancements
-1. **Complete LSTM**: Implement recursive prediction
+1. **Backtest the classical models** too, for an apples-to-apples comparison with the LSTM
 2. **API Wrapper**: FastAPI REST service
 3. **Docker**: Containerization
 4. **Testing**: pytest unit tests
@@ -596,9 +610,9 @@ pytest -v
 
 | Task | Best Model | Metric | Value |
 |------|-----------|--------|-------|
-| Severity Classification | Random Forest | F1 (macro) | 0.762 |
-| Daily Forecasting | Prophet | MAE | 2.19 |
-| Hourly Forecasting | SARIMA | MAE | 2.31 |
+| Severity (leakage-free, ahead-of-time) | Random Forest | macro-F1 | 0.350 |
+| Severity (retrospective, leaky) | Random Forest | macro-F1 | 0.762 |
+| Hourly Forecasting (held-out backtest) | LSTM (PyTorch) | MAE | 3.45 |
 
 ### File Locations
 
