@@ -8,8 +8,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from imblearn.pipeline import Pipeline as ImbPipeline
 from imblearn.over_sampling import SMOTE
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.metrics import f1_score, recall_score, precision_score, classification_report
+from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.metrics import f1_score, recall_score, precision_score
 import joblib
 from pathlib import Path
 
@@ -99,11 +99,11 @@ class SeverityClassifier:
         # Stratified K-Fold CV
         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-        # Cross-validation scores
-        f1_scores = cross_val_score(self.model, X, y, cv=cv,
-                                     scoring='f1_macro', n_jobs=-1)
-        recall_scores = cross_val_score(self.model, X, y, cv=cv,
-                                         scoring='recall_macro', n_jobs=-1)
+        # Cross-validation scores (one pass over the folds, both metrics)
+        scores = cross_validate(self.model, X, y, cv=cv,
+                                scoring=('f1_macro', 'recall_macro'), n_jobs=-1)
+        f1_scores = scores['test_f1_macro']
+        recall_scores = scores['test_recall_macro']
 
         # Train on full dataset for final model
         self.model.fit(X, y)
@@ -119,11 +119,11 @@ class SeverityClassifier:
             'precision_train': precision_score(y, y_pred, average='macro')
         }
 
-        print(f"\nCross-Validation Results:")
+        print("\nCross-Validation Results:")
         print(f"  F1-score (macro): {metrics['f1_cv_mean']:.3f} ± {metrics['f1_cv_std']:.3f}")
         print(f"  Recall (macro):   {metrics['recall_cv_mean']:.3f} ± {metrics['recall_cv_std']:.3f}")
 
-        print(f"\nTraining Set Performance:")
+        print("\nTraining Set Performance:")
         print(f"  F1-score:   {metrics['f1_train']:.3f}")
         print(f"  Recall:     {metrics['recall_train']:.3f}")
         print(f"  Precision:  {metrics['precision_train']:.3f}")

@@ -6,12 +6,12 @@ Demonstrates both severity classification and time series forecasting
 without requiring actual data files (uses synthetic data for demo)
 """
 import sys
+import traceback
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
 from sklearn.datasets import make_classification
 from trainer import SeverityClassifier
 
@@ -19,7 +19,7 @@ from trainer import SeverityClassifier
 def generate_demo_severity_data():
     """Generate synthetic severity classification data"""
     print("\n" + "="*70)
-    print(" DEMO: CASUALTY SEVERITY CLASSIFICATION")
+    print(" DEMO: SEVERITY CLASSIFICATION (synthetic)")
     print("="*70)
     print("\nGenerating synthetic accident data...")
 
@@ -36,10 +36,10 @@ def generate_demo_severity_data():
         random_state=42
     )
 
-    print(f"\nDataset created:")
+    print("\nDataset created:")
     print(f"  Samples: {len(X)}")
     print(f"  Features: {X.shape[1]}")
-    print(f"  Class distribution:")
+    print("  Class distribution:")
     print(f"    Fatal (0):   {(y==0).sum():>5} ({(y==0).sum()/len(y)*100:.1f}%)")
     print(f"    Serious (1): {(y==1).sum():>5} ({(y==1).sum()/len(y)*100:.1f}%)")
     print(f"    Slight (2):  {(y==2).sum():>5} ({(y==2).sum()/len(y)*100:.1f}%)")
@@ -87,7 +87,7 @@ def generate_demo_timeseries_data():
     print("\nGenerating synthetic hourly accident counts...")
 
     # Generate 90 days of hourly data
-    dates = pd.date_range(start='2025-01-01', periods=90*24, freq='H')
+    dates = pd.date_range(start='2025-01-01', periods=90*24, freq='h')
 
     # Base trend
     trend = np.linspace(10, 15, len(dates))
@@ -99,7 +99,7 @@ def generate_demo_timeseries_data():
     daily_season = 5 * np.sin(2 * np.pi * (dates.hour - 9) / 24)
 
     # Random noise
-    noise = np.random.normal(0, 2, len(dates))
+    noise = np.random.default_rng(42).normal(0, 2, len(dates))
 
     # Combine components
     accidents = trend + weekly_season + daily_season + noise
@@ -107,7 +107,7 @@ def generate_demo_timeseries_data():
 
     time_series = pd.Series(accidents, index=dates)
 
-    print(f"\nTime series created:")
+    print("\nTime series created:")
     print(f"  Length: {len(time_series)} hours ({len(time_series)//24} days)")
     print(f"  Date range: {time_series.index.min()} to {time_series.index.max()}")
     print(f"  Mean accidents/hour: {time_series.mean():.2f}")
@@ -143,13 +143,13 @@ def demo_timeseries_simple():
     rmse = np.sqrt(np.mean((actuals - preds) ** 2))
     mape = np.mean(np.abs((actuals - preds) / (actuals + 1))) * 100
 
-    print(f"\nPerformance (last 30 days):")
+    print("\nPerformance (last 30 days):")
     print(f"  MAE:  {mae:.2f} accidents")
     print(f"  RMSE: {rmse:.2f} accidents")
     print(f"  MAPE: {mape:.2f}%")
 
     # Show hourly pattern
-    print(f"\nAverage accidents by hour of day:")
+    print("\nAverage accidents by hour of day:")
     hourly_avg = time_series.groupby(time_series.index.hour).mean()
     print("\n  Hour | Avg Accidents | Visualization")
     print("  " + "-"*50)
@@ -159,7 +159,7 @@ def demo_timeseries_simple():
 
     # Peak hours
     peak_hours = hourly_avg.nlargest(3)
-    print(f"\nPeak risk hours:")
+    print("\nPeak risk hours:")
     for hour, count in peak_hours.items():
         print(f"   {hour:02d}:00 - {count:.2f} accidents/hour")
 
@@ -170,32 +170,31 @@ def main():
     print(" (Using synthetic data - no data files required)")
     print("="*70)
 
-    # Demo 1: Severity Classification
-    try:
-        demo_severity_models()
-    except Exception as e:
-        print(f"\n[FAIL] Severity demo failed: {e}")
-        import traceback
-        traceback.print_exc()
-
-    # Demo 2: Time Series Forecasting
-    try:
-        demo_timeseries_simple()
-    except Exception as e:
-        print(f"\n[FAIL] Time series demo failed: {e}")
-        import traceback
-        traceback.print_exc()
+    failures = []
+    for name, demo in (('severity', demo_severity_models),
+                       ('timeseries', demo_timeseries_simple)):
+        try:
+            demo()
+        except Exception as e:
+            print(f"\n[FAIL] {name} demo failed: {e}")
+            traceback.print_exc()
+            failures.append(name)
 
     print("\n" + "="*70)
+    if failures:
+        print(f" [FAIL] DEMO FAILED: {', '.join(failures)}")
+        print("="*70)
+        return 1
     print(" [OK] DEMO COMPLETE")
     print("="*70)
     print("\nThis demo used synthetic data.")
     print("\nTo train on real UK DfT data:")
     print("  1. Download data from: https://www.data.gov.uk/dataset/road-accidents-safety-data")
-    print("  2. Place CSV files in data/ directory")
-    print("  3. Run: python scripts/train_models.py --task all")
+    print("  2. Place the collision CSV in data/ (see data/README.md)")
+    print("  3. Run: python scripts/train_severity_leakfree.py --model rf")
     print("\nFor more info, see README.md")
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

@@ -15,10 +15,14 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
+import numpy as np
 import pandas as pd
 from data_loader import load_and_prepare_data
 from trainer import SeverityClassifier, compare_models
 from time_series_predictor import TimeSeriesPredictor, compare_timeseries_models
+
+SEVERITY_MODELS = ('lr', 'rf', 'mlp', 'xgb')
+TIMESERIES_MODELS = ('arima', 'sarima', 'prophet', 'lstm')
 
 
 def train_severity_models(data_dir='data', model_type='all'):
@@ -63,7 +67,7 @@ def train_severity_models(data_dir='data', model_type='all'):
     else:
         # Train single model
         classifier = SeverityClassifier(model_type)
-        metrics = classifier.train(X, y)
+        classifier.train(X, y)
         classifier.save_model(f'models/severity_{model_type}.pkl')
 
 
@@ -108,26 +112,26 @@ def train_timeseries_models(data_dir='data', model_type='all', frequency='daily'
         # Compare all models
         results = compare_timeseries_models(time_series, frequency=frequency)
 
-        # Save best model
         if results:
             best_model_name = min(results, key=lambda k: results[k]['mae'])
-            print(f"\nBest model: {best_model_name}")
-            print(f"   MAE: {results[best_model_name]['mae']:.2f}")
+            print(f"\nLowest MAE: {best_model_name} ({results[best_model_name]['mae']:.2f})")
+            print("   Caution: ARIMA/SARIMA/Prophet MAEs are in-sample fit; only the LSTM")
+            print("   is scored on a held-out tail, so these are not directly comparable.")
 
     else:
         # Train single model
         predictor = TimeSeriesPredictor(model_type)
 
         if model_type == 'arima':
-            metrics = predictor.train_arima(time_series)
+            predictor.train_arima(time_series)
         elif model_type == 'sarima':
             if frequency != 'hourly':
                 print("Warning: SARIMA works best with hourly data")
-            metrics = predictor.train_sarima(time_series)
+            predictor.train_sarima(time_series)
         elif model_type == 'prophet':
-            metrics = predictor.train_prophet(time_series)
+            predictor.train_prophet(time_series)
         elif model_type == 'lstm':
-            metrics = predictor.train_lstm(time_series)
+            predictor.train_lstm(time_series)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
@@ -135,14 +139,15 @@ def train_timeseries_models(data_dir='data', model_type='all', frequency='daily'
         predictor.save_model(f'models/timeseries_{model_type}_{frequency}.pkl')
 
         # Generate forecast example
-        print(f"\nGenerating 7-day forecast...")
+        print("\nGenerating 7-day forecast...")
         if frequency == 'daily':
-            forecast = predictor.forecast(steps=7)
+            daily = np.asarray(predictor.forecast(steps=7), dtype=float)
         else:
-            forecast = predictor.forecast(steps=24*7)  # 7 days worth of hours
+            hourly = np.asarray(predictor.forecast(steps=24*7), dtype=float)
+            daily = hourly.reshape(7, 24).sum(axis=1)  # hourly counts -> daily totals
 
-        print(f"Forecasted accidents (next 7 days):")
-        for i, val in enumerate(forecast[:7] if frequency == 'daily' else forecast[::24][:7]):
+        print("Forecasted accidents (next 7 days, daily totals):")
+        for i, val in enumerate(daily):
             print(f"  Day {i+1}: {val:.1f} accidents")
 
 
@@ -174,6 +179,17 @@ def main():
     )
 
     args = parser.parse_args()
+
+    if args.model != 'all':
+        valid = []
+        if args.task in ('severity', 'all'):
+            valid.append(SEVERITY_MODELS)
+        if args.task in ('timeseries', 'all'):
+            valid.append(TIMESERIES_MODELS)
+        if not all(args.model in v for v in valid):
+            parser.error(f"--model {args.model!r} is not valid for --task {args.task}. "
+                         f"Severity: {', '.join(SEVERITY_MODELS)}; "
+                         f"timeseries: {', '.join(TIMESERIES_MODELS)} (or 'all').")
 
     # Create models directory
     Path('models').mkdir(exist_ok=True)

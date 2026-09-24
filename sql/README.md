@@ -18,8 +18,11 @@ SQL implementation of the Python data analysis pipeline using PostgreSQL.
 # Create database
 createdb traffic_risk
 
-# Run scripts in order
+# Run scripts in order (from this sql/ directory)
 psql traffic_risk -f 00_schema.sql
+# ...then load the DfT CSVs into the tables yourself. No loader is included, and the
+# schema's column names (date_of_accident, time_of_accident, ...) differ from the raw
+# CSV headers (date, time, ...), so use a staging table + INSERT ... SELECT.
 psql traffic_risk -f 01_data_cleaning.sql
 psql traffic_risk -f 02_feature_engineering.sql
 psql traffic_risk -f 03_temporal_analysis.sql

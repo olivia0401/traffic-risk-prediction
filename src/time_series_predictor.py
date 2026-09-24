@@ -5,7 +5,6 @@ Predicts hourly/daily accident counts using ARIMA, Prophet, and LSTM
 import pandas as pd
 import numpy as np
 import warnings
-from datetime import datetime, timedelta
 import joblib
 from pathlib import Path
 
@@ -172,7 +171,7 @@ class TimeSeriesPredictor:
             'bic': fitted.bic
         }
 
-        print(f"\nARIMA Model Performance:")
+        print("\nARIMA Model Performance:")
         print(f"  MAE:  {mae:.2f}")
         print(f"  RMSE: {rmse:.2f}")
         print(f"  MAPE: {mape:.2f}%")
@@ -219,7 +218,7 @@ class TimeSeriesPredictor:
             'bic': fitted.bic
         }
 
-        print(f"\nSARIMA Model Performance:")
+        print("\nSARIMA Model Performance:")
         print(f"  MAE:  {mae:.2f}")
         print(f"  RMSE: {rmse:.2f}")
         print(f"  MAPE: {mape:.2f}%")
@@ -240,7 +239,11 @@ class TimeSeriesPredictor:
         if not PROPHET_AVAILABLE:
             raise ImportError("prophet required. Install: pip install prophet")
 
-        print(f"\nTraining Prophet model...")
+        print("\nTraining Prophet model...")
+
+        # Remember the series frequency so forecast() steps in days for a daily
+        # series and in hours for an hourly one.
+        self.freq = pd.infer_freq(time_series.index) or 'h'
 
         # Prepare data for Prophet (requires 'ds' and 'y' columns)
         df = pd.DataFrame({
@@ -272,7 +275,7 @@ class TimeSeriesPredictor:
             'mape': mape
         }
 
-        print(f"\nProphet Model Performance:")
+        print("\nProphet Model Performance:")
         print(f"  MAE:  {mae:.2f}")
         print(f"  RMSE: {rmse:.2f}")
         print(f"  MAPE: {mape:.2f}%")
@@ -312,7 +315,7 @@ class TimeSeriesPredictor:
         if not PYTORCH_AVAILABLE:
             raise ImportError("PyTorch required for LSTM")
 
-        print(f"\nTraining LSTM model...")
+        print("\nTraining LSTM model...")
         print(f"Sequence length: {sequence_length} | max epochs: {epochs}")
 
         values = time_series.values.astype("float32").reshape(-1, 1)
@@ -448,7 +451,8 @@ class TimeSeriesPredictor:
             if self.model is None:
                 raise ValueError("Model not trained yet")
             # Create future dataframe
-            future = self.model.make_future_dataframe(periods=steps, freq='h')
+            future = self.model.make_future_dataframe(
+                periods=steps, freq=getattr(self, 'freq', 'h'))
             forecast = self.model.predict(future)
             return forecast['yhat'].values[-steps:]
 

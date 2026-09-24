@@ -1,4 +1,10 @@
-"""Train severity classification models for UK traffic accidents"""
+"""
+Train the **retrospective** casualty-severity models (collision + vehicle +
+casualty join). These use post-crash casualty fields, so the scores describe
+recorded accidents and do not transfer to ahead-of-time prediction; see
+scripts/train_severity_leakfree.py for the honest pre-incident model.
+Needs collision, vehicle and casualty CSVs (any year) in --data-dir.
+"""
 import sys
 from pathlib import Path
 import argparse
@@ -54,23 +60,22 @@ def main():
 
     else:
         # Train single model
-        print(f"\n" + "="*70)
+        print("\n" + "="*70)
         print(f"TRAINING {args.model.upper()} MODEL")
         print("="*70)
 
         classifier = SeverityClassifier(model_type=args.model)
-        metrics = classifier.train(X, y)
+        classifier.train(X, y)
 
         # Save model
         classifier.save_model(args.output)
 
-        print(f"\n" + "="*70)
+        print("\n" + "="*70)
         print("TRAINING COMPLETE")
         print("="*70)
         print(f"Model saved to: {args.output}")
 
 
 if __name__ == '__main__':
-    # Propagate the exit code: a script that always exits 0 cannot be used as a
-    # step in a pipeline, because every failure reads as success.
+    # main() returns None on success; any failure raises, so Python exits 1.
     sys.exit(main() or 0)

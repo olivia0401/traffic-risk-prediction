@@ -21,17 +21,27 @@ PRE_INCIDENT_FEATURES = [
 ]
 
 
-def _find_collision_csv(data_dir):
-    """Locate a collision CSV in data_dir (any year), or raise a clear error."""
-    for pattern in ('collision_*.csv', 'dft-road-casualty-statistics-collision-*.csv'):
+def _find_table_csv(data_dir, table):
+    """
+    Locate a DfT CSV for ``table`` ('collision', 'vehicle' or 'casualty') in
+    data_dir, any year, or raise a clear error. Accepts both the short name
+    (``collision_2023.csv``) and the official download name
+    (``dft-road-casualty-statistics-collision-2023.csv``).
+    """
+    for pattern in (f'{table}_*.csv', f'dft-road-casualty-statistics-{table}-*.csv'):
         hits = sorted(glob.glob(os.path.join(data_dir, pattern)))
         if hits:
             return hits[-1]  # most recent year if several
     raise FileNotFoundError(
-        f"No collision CSV found in {data_dir!r}. Download one from "
+        f"No {table} CSV found in {data_dir!r}. Download one from "
         "https://data.dft.gov.uk/road-accidents-safety-data/ "
-        "(e.g. dft-road-casualty-statistics-collision-2023.csv)."
+        f"(e.g. dft-road-casualty-statistics-{table}-2023.csv)."
     )
+
+
+def _find_collision_csv(data_dir):
+    """Locate a collision CSV in data_dir (any year), or raise a clear error."""
+    return _find_table_csv(data_dir, 'collision')
 
 
 def load_leakage_free_severity(data_dir='data', hour_feature=True):
@@ -79,7 +89,13 @@ def load_leakage_free_severity(data_dir='data', hour_feature=True):
 
 def load_and_prepare_data(data_dir='data'):
     """
-    Load and merge 2025 UK DfT accident data
+    Load and merge the collision, vehicle and casualty tables for the
+    **retrospective** (leaky) casualty-severity model. Any year works; the most
+    recent file of each table in ``data_dir`` is used.
+
+    Note: the feature set includes casualty attributes that only exist after a
+    collision, so scores from this loader are descriptive, not predictive. For
+    the honest ahead-of-time model use ``load_leakage_free_severity``.
 
     Args:
         data_dir: Directory containing CSV files
@@ -89,15 +105,13 @@ def load_and_prepare_data(data_dir='data'):
         y: Target vector (casualty_severity encoded as 0/1/2)
         feature_names: List of feature names
     """
-    print("\nLoading 2025 UK DfT accident data...")
+    paths = {t: _find_table_csv(data_dir, t) for t in ('collision', 'vehicle', 'casualty')}
+    print("\nLoading UK DfT accident data: "
+          + ", ".join(os.path.basename(p) for p in paths.values()))
 
-    # Load datasets
-    collision_df = pd.read_csv(f'{data_dir}/collision_2025.csv',
-                                low_memory=False)
-    vehicle_df = pd.read_csv(f'{data_dir}/vehicle_2025.csv',
-                              low_memory=False)
-    casualty_df = pd.read_csv(f'{data_dir}/casualty_2025.csv',
-                               low_memory=False)
+    collision_df = pd.read_csv(paths['collision'], low_memory=False)
+    vehicle_df = pd.read_csv(paths['vehicle'], low_memory=False)
+    casualty_df = pd.read_csv(paths['casualty'], low_memory=False)
 
     print(f"  Collision records: {len(collision_df)}")
     print(f"  Vehicle records: {len(vehicle_df)}")
@@ -144,10 +158,10 @@ def load_and_prepare_data(data_dir='data'):
     # Encode target: 1→0 (Fatal), 2→1 (Serious), 3→2 (Slight)
     y = y - 1
 
-    print(f"\nFinal dataset:")
+    print("\nFinal dataset:")
     print(f"  Samples: {len(X)}")
     print(f"  Features: {X.shape[1]}")
-    print(f"  Class distribution:")
+    print("  Class distribution:")
     print(f"    Fatal (0):   {(y==0).sum()}")
     print(f"    Serious (1): {(y==1).sum()}")
     print(f"    Slight (2):  {(y==2).sum()}")

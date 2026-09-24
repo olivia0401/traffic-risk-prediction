@@ -1,38 +1,33 @@
 # Data Directory
 
-## Required Files
+CSV files here are gitignored. Download them from the UK Department for Transport:
+https://www.data.gov.uk/dataset/road-accidents-safety-data
 
-Place the following CSV files in this directory:
+## File names
 
-- `collision_2025.csv` - Main collision/accident records
-- `vehicle_2025.csv` - Vehicle information for each accident
-- `casualty_2025.csv` - Casualty (injury/death) records
+The loaders (`src/data_loader.py`) accept **any year** and either naming scheme.
+If several years are present, they use the most recent one:
 
-## Data Source
+- short: `collision_2023.csv`, `vehicle_2023.csv`, `casualty_2023.csv`
+- official: `dft-road-casualty-statistics-collision-2023.csv` (and `-vehicle-`, `-casualty-`)
 
-**UK Department for Transport (DfT) - Road Casualty Statistics**
+## What needs what
 
-Download from: https://www.data.gov.uk/dataset/road-accidents-safety-data
+| Command | Files needed |
+|---------|--------------|
+| `scripts/train_severity_leakfree.py`, `scripts/naive_baselines.py`, `scripts/data_insights.py`, `scripts/train_models.py --task timeseries` | collision only |
+| `scripts/train_severity.py`, `scripts/train_models.py --task severity` (retrospective model) | collision + vehicle + casualty, same year |
 
-Look for: "Road Safety Data - Provisional 2025"
+## Files behind the README numbers
 
-## File Descriptions
+- **Full-year 2023 collision file**: 104,258 collisions (~19.8 MB). All re-run numbers in the
+  main README (leakage-free severity, LSTM and naive baselines, data insights) come from it.
+- **2025 provisional extract**: used for the SQL schema and the original write-up
+  (collision 48,472 rows, vehicle 87,805, casualty 60,991). The retrospective severity
+  score (macro-F1 ~0.76) came from this extract and has not been re-run.
 
-### collision_2025.csv
-- Each row = one traffic accident
-- Key fields: date, time, location, weather, road conditions, severity
-- Size: ~9 MB, 48,472 records
+## Key fields
 
-### vehicle_2025.csv
-- Each row = one vehicle involved in an accident
-- Key fields: vehicle type, driver age, manoeuvre
-- Size: ~8.6 MB, 87,805 records
-
-### casualty_2025.csv
-- Each row = one casualty (injured/killed person)
-- Key fields: severity, age, casualty type
-- Size: ~4.7 MB, 60,991 records
-
-## Note
-
-CSV files are excluded from git via `.gitignore` to keep repository size small.
+- collision: date, time, location, weather, road conditions, `collision_severity`
+- vehicle: vehicle type, driver age, manoeuvre
+- casualty: `casualty_severity`, age, casualty type (post-crash; leaky for ahead-of-time prediction)
