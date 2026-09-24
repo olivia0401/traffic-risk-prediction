@@ -178,10 +178,16 @@ def main():
     # Create models directory
     Path('models').mkdir(exist_ok=True)
 
+    # A training run that crashed must not exit 0. The previous version printed
+    # a traceback and then fell through to "TRAINING COMPLETE" and `return 0`,
+    # so any CI step or shell script calling this saw success while models/ was
+    # empty or stale.
+    failures = []
+
     if args.task in ['severity', 'all']:
         try:
             train_severity_models(args.data_dir, args.model)
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             print(f"\n[FAIL] Error: Data files not found in '{args.data_dir}/'")
             print("Please download UK DfT data from:")
             print("https://www.data.gov.uk/dataset/road-accidents-safety-data")
@@ -190,11 +196,12 @@ def main():
             print(f"\n[FAIL] Severity training failed: {e}")
             import traceback
             traceback.print_exc()
+            failures.append(f"severity ({type(e).__name__}: {e})")
 
     if args.task in ['timeseries', 'all']:
         try:
             train_timeseries_models(args.data_dir, args.model, args.freq)
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             print(f"\n[FAIL] Error: Data files not found in '{args.data_dir}/'")
             print("Please download UK DfT data from:")
             print("https://www.data.gov.uk/dataset/road-accidents-safety-data")
@@ -203,6 +210,15 @@ def main():
             print(f"\n[FAIL] Time series training failed: {e}")
             import traceback
             traceback.print_exc()
+            failures.append(f"timeseries ({type(e).__name__}: {e})")
+
+    if failures:
+        print("\n" + "="*70)
+        print(f" [FAIL] TRAINING FAILED — {len(failures)} task(s) did not complete")
+        print("="*70)
+        for item in failures:
+            print(f"  - {item}")
+        return 1
 
     print("\n" + "="*70)
     print(" [OK] TRAINING COMPLETE")

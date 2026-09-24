@@ -71,4 +71,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # Propagate the exit code: a script that always exits 0 cannot be used as a
+    # step in a pipeline, because every failure reads as success.
+    sys.exit(main() or 0)
