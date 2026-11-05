@@ -1,5 +1,11 @@
 # UK Road Casualty Severity Analysis
 
+> **2026-11-05 review:** the pre-incident loader now preserves missing values,
+> with median imputation fitted inside each cross-validation training fold.
+> Dataset discovery also selects the newest year across both supported filename
+> styles. Published full-dataset scores predate this preprocessing correction;
+> they have not been re-measured in this review. Re-run training for updated scores.
+
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://www.postgresql.org/)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.2+-orange.svg)](https://scikit-learn.org/)

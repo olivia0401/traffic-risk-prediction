@@ -23,7 +23,7 @@ from trainer import SeverityClassifier  # noqa: E402
 def _collision_csv(path, n=300, seed=0, post_crash=True):
     rng = np.random.default_rng(seed)
     df = pd.DataFrame({f: rng.integers(1, 6, n) for f in PRE_INCIDENT_FEATURES})
-    df.loc[:9, 'road_type'] = -1  # DfT "missing" code -> must be median-filled
+    df.loc[:9, 'road_type'] = -1  # Keep missing values until the training fold.
     df['collision_index'] = [f'c{i}' for i in range(n)]
     df['date'] = pd.date_range('2023-01-01', periods=n, freq='h').strftime('%d/%m/%Y')
     df['time'] = pd.date_range('2023-01-01', periods=n, freq='h').strftime('%H:%M')
@@ -51,13 +51,19 @@ def test_find_table_csv_picks_most_recent_year(tmp_path):
     assert _find_table_csv(str(tmp_path), 'collision').endswith('collision_2023.csv')
 
 
+def test_find_table_csv_compares_years_across_naming_schemes(tmp_path):
+    (tmp_path / 'collision_2022.csv').write_text('x\n')
+    (tmp_path / 'dft-road-casualty-statistics-collision-2025.csv').write_text('x\n')
+    assert _find_table_csv(str(tmp_path), 'collision').endswith('collision-2025.csv')
+
+
 def test_leakage_free_loader_excludes_post_crash_fields(tmp_path):
     _collision_csv(tmp_path / 'collision_2023.csv')
     X, y, feats = load_leakage_free_severity(str(tmp_path))
     assert 'age_of_casualty' not in feats and 'casualty_type' not in feats
     assert set(feats) == set(PRE_INCIDENT_FEATURES) | {'hour_of_day'}
     assert set(np.unique(y)) <= {0, 1, 2}
-    assert not np.isnan(X).any()
+    assert np.isnan(X[:10, feats.index('road_type')]).all()
     assert (X[:, feats.index('road_type')] != -1).all()
 
 
@@ -102,6 +108,17 @@ def test_severity_classifier_cv_and_roundtrip(tmp_path):
     clf.save_model(str(tmp_path / 'm.pkl'))
     loaded = SeverityClassifier.load_model(str(tmp_path / 'm.pkl'))
     assert (loaded.predict(X) == clf.predict(X)).all()
+
+
+def test_missing_values_are_imputed_from_training_rows_only():
+    model = SeverityClassifier('lr').model
+    X_train = np.array([[1., 0.], [3., 1.], [np.nan, 0.], [5., 1.]])
+    model.fit(X_train, [0, 1, 0, 1])
+    imputer = model.named_steps['imputer']
+    assert imputer.statistics_[0] == 3
+    X_heldout = np.array([[100000., 0.], [np.nan, 1.]])
+    assert len(model.predict(X_heldout)) == 2
+    assert imputer.transform(X_heldout)[1, 0] == 3
 
 
 def test_lstm_scores_a_held_out_tail():

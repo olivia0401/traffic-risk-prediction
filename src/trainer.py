@@ -5,6 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from imblearn.pipeline import Pipeline as ImbPipeline
 from imblearn.over_sampling import SMOTE
@@ -33,6 +34,7 @@ class SeverityClassifier:
         if model_type == 'lr':
             # Logistic Regression with scaling and balanced class weights
             return Pipeline([
+                ('imputer', SimpleImputer(strategy='median', keep_empty_features=True)),
                 ('scaler', StandardScaler()),
                 ('clf', LogisticRegression(
                     class_weight='balanced',
@@ -44,6 +46,7 @@ class SeverityClassifier:
         elif model_type == 'rf':
             # Random Forest with balanced class weights
             return Pipeline([
+                ('imputer', SimpleImputer(strategy='median', keep_empty_features=True)),
                 ('clf', RandomForestClassifier(
                     class_weight='balanced',
                     n_estimators=100,
@@ -54,6 +57,7 @@ class SeverityClassifier:
         elif model_type == 'mlp':
             # MLP with SMOTE for imbalanced data
             return ImbPipeline([
+                ('imputer', SimpleImputer(strategy='median', keep_empty_features=True)),
                 ('scaler', StandardScaler()),
                 ('smote', SMOTE(random_state=42)),
                 ('clf', MLPClassifier(
@@ -68,6 +72,7 @@ class SeverityClassifier:
         elif model_type == 'xgb':
             # XGBoost with SMOTE for multi-class imbalance
             return ImbPipeline([
+                ('imputer', SimpleImputer(strategy='median', keep_empty_features=True)),
                 ('smote', SMOTE(random_state=42)),
                 ('clf', XGBClassifier(
                     n_estimators=100,

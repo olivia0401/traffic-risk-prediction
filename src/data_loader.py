@@ -1,6 +1,7 @@
 """Data loading and preprocessing for UK DfT accident data"""
 import glob
 import os
+import re
 
 import pandas as pd
 import numpy as np
@@ -28,10 +29,14 @@ def _find_table_csv(data_dir, table):
     (``collision_2023.csv``) and the official download name
     (``dft-road-casualty-statistics-collision-2023.csv``).
     """
+    hits = []
     for pattern in (f'{table}_*.csv', f'dft-road-casualty-statistics-{table}-*.csv'):
-        hits = sorted(glob.glob(os.path.join(data_dir, pattern)))
-        if hits:
-            return hits[-1]  # most recent year if several
+        hits.extend(glob.glob(os.path.join(data_dir, pattern)))
+    if hits:
+        def year_key(path):
+            years = re.findall(r'(?<!\d)(?:19|20)\d{2}(?!\d)', os.path.basename(path))
+            return (max(map(int, years), default=0), os.path.basename(path))
+        return max(hits, key=year_key)
     raise FileNotFoundError(
         f"No {table} CSV found in {data_dir!r}. Download one from "
         "https://data.dft.gov.uk/road-accidents-safety-data/ "
@@ -71,11 +76,10 @@ def load_leakage_free_severity(data_dir='data', hour_feature=True):
         X['hour_of_day'] = hour
         feats = feats + ['hour_of_day']
 
-    # DfT encodes missing/unknown as -1 (and 9/99 for some fields); treat -1 as
-    # missing and median-fill, matching the original loader's convention.
+    # Keep missing values here. The classifier learns imputation statistics
+    # inside each training fold, so validation rows cannot influence medians.
     for col in X.columns:
         X[col] = pd.to_numeric(X[col], errors='coerce').replace(-1, np.nan)
-        X[col] = X[col].fillna(X[col].median())
 
     y = pd.to_numeric(df['collision_severity'], errors='coerce')
     valid = y.isin([1, 2, 3])
